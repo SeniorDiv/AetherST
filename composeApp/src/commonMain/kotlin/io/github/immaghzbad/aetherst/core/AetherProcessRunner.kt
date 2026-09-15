@@ -1,5 +1,6 @@
 package io.github.immaghzbad.aetherst.shared.core
 
+import io.github.immaghzbad.aetherst.core.TorController
 import io.github.immaghzbad.aetherst.shared.data.LogRepository
 import io.github.immaghzbad.aetherst.shared.model.*
 import io.github.immaghzbad.aetherst.platform.PlatformContext
@@ -213,7 +214,7 @@ class AetherProcessRunner(private val context: PlatformContext) {
                     TorMode.TOR_REVERSE -> command.add("--tor-reverse")
                     TorMode.TOR_ONLY -> command.add("--tor-only")
                 }
-                val torPort = io.github.immaghzbad.aetherst.core.TorController.activePort(config)
+                val torPort = TorController.activePort(config)
                 command.add("--tor-bind")
                 command.add("127.0.0.1:$torPort")
                 val torDir = java.io.File(systemUtils.getFilesDir(), "tor")
@@ -410,17 +411,17 @@ class AetherProcessRunner(private val context: PlatformContext) {
         if (lower.contains("tor")) {
             val bootstrapMatch = Regex("""bootstrapp?ed?\s+(\d{1,3})\s*%""").find(lower)
             if (bootstrapMatch != null) {
-                bootstrapMatch.groupValues.getOrNull(1)?.toIntOrNull()?.let { io.github.immaghzbad.aetherst.core.TorController.notifyBootstrap(it) }
+                    bootstrapMatch.groupValues.getOrNull(1)?.toIntOrNull()?.let { TorController.notifyBootstrap(it) }
             }
             if (lower.contains("tor is ready") || lower.contains("leaves through tor") || lower.contains("way out")) {
-                io.github.immaghzbad.aetherst.core.TorController.notifyCoreReady()
-                io.github.immaghzbad.aetherst.core.TorController.notifyBootstrap(100)
+                    TorController.notifyCoreReady()
+                    TorController.notifyBootstrap(100)
                 val readyPort = Regex("""127\.0\.0\.1:(\d+)""").find(line)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                io.github.immaghzbad.aetherst.core.TorController.notifySocksListening(readyPort ?: io.github.immaghzbad.aetherst.core.TorController.currentPort())
-                io.github.immaghzbad.aetherst.core.TorController.notifyProxyReady(readyPort ?: io.github.immaghzbad.aetherst.core.TorController.currentPort())
+                    TorController.notifySocksListening(readyPort ?: TorController.currentPort())
+                    TorController.notifyProxyReady(readyPort ?: TorController.currentPort())
             } else if (lower.contains("tor socks5 listening")) {
                 val listenPort = Regex("""127\.0\.0\.1:(\d+)""").find(line)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                io.github.immaghzbad.aetherst.core.TorController.notifySocksListening(listenPort ?: io.github.immaghzbad.aetherst.core.TorController.currentPort())
+                    TorController.notifySocksListening(listenPort ?: TorController.currentPort())
             }
         }
         when {
