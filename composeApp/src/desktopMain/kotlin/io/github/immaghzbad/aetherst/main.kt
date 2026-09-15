@@ -208,13 +208,13 @@ fun main(args: Array<String> = emptyArray()) {
 
     try { System.err.println("[BOOT] Entering Compose application block") } catch (_: Throwable) {}
     try { io.github.immaghzbad.aetherst.shared.desktop.DesktopLogger.i("Main", "Entering Compose application block") } catch (_: Throwable) {}
-    try {
-    application {
-        val viewModelStoreOwner = remember {
-            object : ViewModelStoreOwner {
-                override val viewModelStore = ViewModelStore()
+    val runComposeApp: () -> Unit = {
+        application {
+            val viewModelStoreOwner = remember {
+                object : ViewModelStoreOwner {
+                    override val viewModelStore = ViewModelStore()
+                }
             }
-        }
 
         var isVisible by remember { mutableStateOf(true) }
         var showCloseDialog by remember { mutableStateOf(false) }
@@ -647,6 +647,26 @@ fun main(args: Array<String> = emptyArray()) {
                     }
                 }
             }
+        }
+    }
+
+    try {
+        runComposeApp()
+    } catch (e: UnsatisfiedLinkError) {
+        try {
+            io.github.immaghzbad.aetherst.shared.desktop.DesktopLogger.w("Main", "Native link error in hardware rendering (${e.message}), retrying with software renderer")
+            System.setProperty("skiko.renderApi", "SOFTWARE_FAST")
+            runComposeApp()
+        } catch (e2: Throwable) {
+            try {
+                System.err.println("[BOOT] Compose application crashed: ${e2.message}")
+                e2.printStackTrace()
+                io.github.immaghzbad.aetherst.shared.desktop.DesktopLogger.e("Main", "Compose application crashed: ${e2.stackTraceToString().take(4000)}")
+                File(System.getProperty("java.io.tmpdir"), "AetherST/aetherst-boot.log").appendText("[BOOT] Compose crash: ${e2.stackTraceToString().take(4000)}\n")
+                File(System.getProperty("java.io.tmpdir"), "last_crash.log").writeText(e2.stackTraceToString().take(8000))
+                javax.swing.JOptionPane.showMessageDialog(null, "AetherST failed to start:\n${e2.message}\n\nLog: ${io.github.immaghzbad.aetherst.shared.desktop.DesktopLogger.getLogFilePath()}\nBoot log: ${System.getProperty("java.io.tmpdir")}/AetherST/aetherst-boot.log", "AetherST Error", javax.swing.JOptionPane.ERROR_MESSAGE)
+            } catch (_: Throwable) {}
+            throw e2
         }
     } catch (e: Throwable) {
         try {
