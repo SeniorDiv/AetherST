@@ -128,26 +128,30 @@ actual object ConnectionController {
                 inputProvider = { loginCodeChannel.receive() }
             )
 
-            val coreSocksPort = effectiveConfig.socksPort.toIntOrNull() ?: 1819
+            val targetSocksPort = when {
+                effectiveConfig.isTorActive() -> effectiveConfig.torBindPort.toIntOrNull() ?: 3081
+                effectiveConfig.isPsiphonActive() -> effectiveConfig.psiphonSocksPort.toIntOrNull() ?: 3080
+                else -> effectiveConfig.socksPort.toIntOrNull() ?: 1819
+            }
             routingEngine = RoutingEngine(effectiveConfig.routingRules)
             socksProxy = LocalSocksProxyServer(
                 listenHost = "127.0.0.1",
                 listenPort = 10808,
                 targetHost = "127.0.0.1",
-                targetPort = coreSocksPort,
+                targetPort = targetSocksPort,
                 routingEngine = routingEngine!!
             ).apply { start() }
             httpProxy = LocalHttpProxyServer(
                 listenHost = "127.0.0.1",
                 listenPort = 10809,
                 targetHost = "127.0.0.1",
-                targetPort = coreSocksPort,
+                targetPort = targetSocksPort,
                 routingEngine = routingEngine!!
             ).apply { start() }
-            LogRepository.i("[Controller] Counting proxies started (socks=10808, http=10809) -> core $coreSocksPort")
+            LogRepository.i("[Controller] Counting proxies started (socks=10808, http=10809) -> target $targetSocksPort")
             if (effectiveConfig.connectionMode == ConnectionMode.TUNNEL || effectiveConfig.connectionMode == ConnectionMode.SYSTEM_PROXY) {
                 val dnsUpstream = (if (effectiveConfig.dnsEnabled) effectiveConfig.dnsList else "").ifEmpty { "1.1.1.1,1.0.0.1" }
-                val tmpDns = LocalDnsServer(listenHost = "127.0.0.1", listenPort = 53, socksHost = "127.0.0.1", socksPort = coreSocksPort, upstreamList = dnsUpstream)
+                val tmpDns = LocalDnsServer(listenHost = "127.0.0.1", listenPort = 53, socksHost = "127.0.0.1", socksPort = targetSocksPort, upstreamList = dnsUpstream)
                 tmpDns.start()
                 if (tmpDns.isRunning()) {
                     dnsServer = tmpDns
@@ -186,21 +190,26 @@ actual object ConnectionController {
             if (tunnelModeStarted) return
             tunnelModeStarted = true
 
+            val targetSocksPort = when {
+                config.isTorActive() -> config.torBindPort.toIntOrNull() ?: 3081
+                config.isPsiphonActive() -> config.psiphonSocksPort.toIntOrNull() ?: 3080
+                else -> config.socksPort.toIntOrNull() ?: 1819
+            }
+
             if (socksProxy == null) {
-                val coreSocksPort = config.socksPort.toIntOrNull() ?: 1819
                 if (routingEngine == null) routingEngine = RoutingEngine(config.routingRules)
                 socksProxy = LocalSocksProxyServer(
                     listenHost = "127.0.0.1",
                     listenPort = 10808,
                     targetHost = "127.0.0.1",
-                    targetPort = coreSocksPort,
+                    targetPort = targetSocksPort,
                     routingEngine = routingEngine!!
                 ).apply { start() }
             }
             LogRepository.i("[Controller] Local SOCKS bridge listening on 127.0.0.1:10808")
 
-            TunHelper.start(config.socksPort.toIntOrNull() ?: 1819, config.mtu)
-            LogRepository.i("[Controller] TUN helper started mtu=${config.mtu}")
+            TunHelper.start(targetSocksPort, config.mtu)
+            LogRepository.i("[Controller] TUN helper started targetSocksPort=$targetSocksPort mtu=${config.mtu}")
         }
 
         private val stopLock = Any()

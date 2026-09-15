@@ -37,12 +37,22 @@ class DesktopVpnController(private val context: PlatformContext) : VpnController
         connectionController.stop()
     }
 
+    override fun restartVpn() {
+        connectionController.stop()
+        connectionController.start()
+    }
+
     override fun startProxy() {
         connectionController.start()
     }
 
     override fun stopProxy() {
         connectionController.stop()
+    }
+
+    override fun restartProxy() {
+        connectionController.stop()
+        connectionController.start()
     }
 
     override fun submitLoginCode(code: String) {
@@ -239,9 +249,9 @@ class DesktopSystemUtils : SystemUtils {
             val stream = this::class.java.classLoader.getResourceAsStream("app.properties")
             if (stream != null) {
                 stream.use { props.load(it) }
-                props.getProperty("app.version", "1.1.1")
-            } else "1.1.1"
-        } catch (_: Exception) { "1.1.1" }
+                props.getProperty("app.version", "1.7.1")
+            } else "1.7.1"
+        } catch (_: Exception) { "1.7.1" }
     }
     override fun getAppVersionCode(): Int {
         return try {
@@ -249,9 +259,9 @@ class DesktopSystemUtils : SystemUtils {
             val stream = this::class.java.classLoader.getResourceAsStream("app.properties")
             if (stream != null) {
                 stream.use { props.load(it) }
-                props.getProperty("app.version_code", props.getProperty("app.versionCode", "1")).toIntOrNull() ?: 1
-            } else 1
-        } catch (_: Exception) { 1 }
+                props.getProperty("app.version_code", props.getProperty("app.versionCode", "10")).toIntOrNull() ?: 10
+            } else 10
+        } catch (_: Exception) { 10 }
     }
     override fun exitApp() {
         try {
@@ -310,10 +320,7 @@ class DesktopSystemUtils : SystemUtils {
             fc.dialogTitle = "Select Backup File"
             fc.fileSelectionMode = javax.swing.JFileChooser.FILES_ONLY
             fc.isAcceptAllFileFilterUsed = true
-            fc.addChoosableFileFilter(object : javax.swing.filechooser.FileNameExtensionFilter("AetherST files (*.astf)", "astf") {
-                override fun accept(f: File): Boolean = f.isDirectory || f.name.endsWith(".astf")
-                override fun getDescription(): String = "AetherST files (*.astf)"
-            })
+            fc.addChoosableFileFilter(javax.swing.filechooser.FileNameExtensionFilter("AetherST files (*.astf)", "astf"))
             fc.fileFilter = fc.choosableFileFilters.last()
             val result = fc.showOpenDialog(null)
             if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
