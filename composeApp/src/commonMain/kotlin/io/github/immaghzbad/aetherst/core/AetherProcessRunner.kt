@@ -207,6 +207,59 @@ class AetherProcessRunner(private val context: PlatformContext) {
                 if (config.upstreamProxy.startsWith("http://", ignoreCase = true)) command.add("--h2")
             }
 
+            if (config.torEnabled) {
+                when (config.torMode) {
+                    TorMode.TOR -> command.add("--tor")
+                    TorMode.TOR_REVERSE -> command.add("--tor-reverse")
+                    TorMode.TOR_ONLY -> command.add("--tor-only")
+                }
+                val torPort = io.github.immaghzbad.aetherst.core.TorController.activePort(config)
+                command.add("--tor-bind")
+                command.add("127.0.0.1:$torPort")
+                val torDir = java.io.File(systemUtils.getFilesDir(), "tor")
+                if (!torDir.exists()) torDir.mkdirs()
+                command.add("--tor-dir")
+                command.add(torDir.absolutePath)
+                when (config.torBridgesMode.trim().lowercase()) {
+                    "force" -> command.add("--tor-bridges")
+                    "off" -> command.add("--no-tor-bridges")
+                }
+                config.torBridgeLines.split(";", "\n").map { it.trim() }.filter { it.isNotEmpty() }.forEach {
+                    command.add("--tor-bridge")
+                    command.add(it)
+                }
+                if (config.torPtDir.isNotBlank()) {
+                    command.add("--tor-pt-dir")
+                    command.add(config.torPtDir.trim())
+                } else {
+                    command.add("--tor-pt-dir")
+                    command.add(torDir.absolutePath)
+                }
+                config.torPtBinaries.split(";", "\n").map { it.trim() }.filter { it.isNotEmpty() }.forEach {
+                    command.add("--tor-pt")
+                    command.add(it)
+                }
+            }
+            val mimActive = config.protocol == AetherProtocol.MASQUE && config.mimEnabled
+            val hasMimManual = config.mimOuter.isNotBlank() || config.mimInner.isNotBlank()
+            if (mimActive) {
+                command.add("--mim")
+                if (config.mimOuter.isNotBlank()) {
+                    command.add("--mim-outer")
+                    command.add(config.mimOuter.trim())
+                }
+                if (config.mimInner.isNotBlank()) {
+                    command.add("--mim-inner")
+                    command.add(config.mimInner.trim())
+                }
+                if (config.mimScan && !hasMimManual) command.add("--mim-scan")
+            }
+            if (!config.quicV2Probe) command.add("--no-quic-v2")
+            if (config.firewallMark.isNotBlank()) {
+                command.add("--mark")
+                command.add(config.firewallMark.trim())
+            }
+
             val env = mutableMapOf<String, String>()
             env["AETHER_PROTOCOL"] = config.protocol.rawValue
             env["AETHER_NOIZE"] = config.noise.rawValue
@@ -272,6 +325,36 @@ class AetherProcessRunner(private val context: PlatformContext) {
             }
             if (config.dnsEnabled && config.dnsList.isNotEmpty()) env["AETHER_DNS"] = config.dnsList
             if (config.upstreamProxyEnabled && config.upstreamProxy.isNotEmpty()) env["AETHER_UPSTREAM"] = config.upstreamProxy
+            if (config.torEnabled) {
+                env["AETHER_TOR"] = when (config.torMode) {
+                    TorMode.TOR -> "chain"
+                    TorMode.TOR_REVERSE -> "reverse"
+                    TorMode.TOR_ONLY -> "only"
+                }
+                val torPort = io.github.immaghzbad.aetherst.core.TorController.activePort(config)
+                env["AETHER_TOR_BIND"] = "127.0.0.1:$torPort"
+                val torDir = java.io.File(systemUtils.getFilesDir(), "tor")
+                if (!torDir.exists()) torDir.mkdirs()
+                env["AETHER_TOR_DIR"] = torDir.absolutePath
+                when (config.torBridgesMode.trim().lowercase()) {
+                    "force" -> env["AETHER_TOR_BRIDGES"] = "auto"
+                    "off" -> env["AETHER_TOR_BRIDGES"] = "off"
+                }
+                val manualBridges = config.torBridgeLines.split(";", "\n").map { it.trim() }.filter { it.isNotEmpty() }
+                if (manualBridges.isNotEmpty()) env["AETHER_TOR_BRIDGES"] = manualBridges.joinToString(";")
+                val ptBinaries = config.torPtBinaries.split(";", "\n").map { it.trim() }.filter { it.isNotEmpty() }
+                if (ptBinaries.isNotEmpty()) env["AETHER_TOR_PT"] = ptBinaries.joinToString(";")
+                env["AETHER_TOR_PT_DIR"] = config.torPtDir.trim().ifEmpty { torDir.absolutePath }
+                if (config.torCountry.isNotBlank()) env["AETHER_TOR_COUNTRY"] = config.torCountry.trim().lowercase()
+            }
+            if (mimActive) {
+                env["AETHER_PROTOCOL"] = "mim"
+                if (config.mimOuter.isNotBlank()) env["AETHER_MIM_OUTER_PEER"] = config.mimOuter.trim()
+                if (config.mimInner.isNotBlank()) env["AETHER_MIM_INNER_PEER"] = config.mimInner.trim()
+                if (config.mimScan && !hasMimManual) env["AETHER_MIM_PEERS"] = "auto"
+            }
+            if (!config.quicV2Probe) env["AETHER_QUIC_V2"] = "0"
+            if (config.firewallMark.isNotBlank()) env["AETHER_MARK"] = config.firewallMark.trim()
             env["AETHER_ROUTE_SNIFF"] = if (config.routeSniffing) "1" else "0"
             env["AETHER_ROUTE_SNIFF_MS"] = config.sniffingTimeoutMs.toString()
             env["AETHER_REPROVISION"] = if (config.reprovision) "1" else "0"
@@ -314,14 +397,31 @@ class AetherProcessRunner(private val context: PlatformContext) {
     private fun parseOutputLine(line: String, attemptId: Long, protocol: AetherProtocol, onCodeRequired: () -> Unit) {
         if (currentAttemptId.get() != attemptId) return
         val lower = line.lowercase()
+        val source = if (lower.contains("tor")) "Tor" else "AetherCore"
         when {
-            lower.contains(" error ") || lower.contains("[error]") -> LogRepository.e(line, "AetherCore")
-            lower.contains(" warn ") || lower.contains("[warn]") -> LogRepository.w(line, "AetherCore")
-            else -> LogRepository.i(line, "AetherCore")
+            lower.contains(" error ") || lower.contains("[error]") -> LogRepository.e(line, source)
+            lower.contains(" warn ") || lower.contains("[warn]") -> LogRepository.w(line, source)
+            else -> LogRepository.i(line, source)
         }
         if (isZeroTrustCodePrompt(lower)) {
             onCodeRequired()
             return
+        }
+        if (lower.contains("tor")) {
+            val bootstrapMatch = Regex("""bootstrapp?ed?\s+(\d{1,3})\s*%""").find(lower)
+            if (bootstrapMatch != null) {
+                bootstrapMatch.groupValues.getOrNull(1)?.toIntOrNull()?.let { io.github.immaghzbad.aetherst.core.TorController.notifyBootstrap(it) }
+            }
+            if (lower.contains("tor is ready") || lower.contains("leaves through tor") || lower.contains("way out")) {
+                io.github.immaghzbad.aetherst.core.TorController.notifyCoreReady()
+                io.github.immaghzbad.aetherst.core.TorController.notifyBootstrap(100)
+                val readyPort = Regex("""127\.0\.0\.1:(\d+)""").find(line)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                io.github.immaghzbad.aetherst.core.TorController.notifySocksListening(readyPort ?: io.github.immaghzbad.aetherst.core.TorController.currentPort())
+                io.github.immaghzbad.aetherst.core.TorController.notifyProxyReady(readyPort ?: io.github.immaghzbad.aetherst.core.TorController.currentPort())
+            } else if (lower.contains("tor socks5 listening")) {
+                val listenPort = Regex("""127\.0\.0\.1:(\d+)""").find(line)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                io.github.immaghzbad.aetherst.core.TorController.notifySocksListening(listenPort ?: io.github.immaghzbad.aetherst.core.TorController.currentPort())
+            }
         }
         when {
             lower.contains("scanning") -> {

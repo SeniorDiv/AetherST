@@ -26,7 +26,7 @@ object TunHelper {
     @Volatile
     private var targetSocksPort = 1819
 
-    fun start(socksTargetPort: Int) {
+    fun start(socksTargetPort: Int, mtu: Int = 1280) {
         if (isRunning.getAndSet(true)) return
         targetSocksPort = socksTargetPort
         try {
@@ -41,7 +41,7 @@ object TunHelper {
             val dataDir = getSystemUtils(context).getFilesDir()
             val dataDirFile = File(dataDir)
 
-            File(dataDir, HEV_YAML).writeText(buildHevConfig(socksTargetPort))
+            File(dataDir, HEV_YAML).writeText(buildHevConfig(socksTargetPort, mtu))
             writeParams(socksTargetPort, dataDirFile)
             File(dataDir, STOP_FLAG).delete()
             writeHelperScript(dataDirFile)
@@ -96,16 +96,17 @@ object TunHelper {
 
     fun isActive(): Boolean = isRunning.get()
 
-    private fun buildHevConfig(socksTargetPort: Int): String {
+    private fun buildHevConfig(socksTargetPort: Int, mtu: Int = 1280): String {
         val logFile = runCatching {
             val context = PlatformContext()
             val dataDir = getSystemUtils(context).getFilesDir()
             File(dataDir, "hev.log").absolutePath.replace('\\', '/')
         }.getOrDefault("hev.log")
+        val effectiveMtu = mtu.coerceIn(576, 9000)
         return """
             |tunnel:
             |  name: $TUN_NAME
-            |  mtu: $TUN_MTU
+            |  mtu: $effectiveMtu
             |  ipv4: $TUN_IPV4
             |socks5:
             |  address: 127.0.0.1

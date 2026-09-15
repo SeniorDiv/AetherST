@@ -90,12 +90,17 @@ val buildCloakWindows by tasks.registering(Exec::class) {
     inputs.file(src)
     isIgnoreExitValue = true
     notCompatibleWithConfigurationCache("Uses Exec with file copy at execution")
+    val isWinHost = System.getProperty("os.name").lowercase().contains("win")
     doFirst {
         outDir.mkdirs()
         buildDir.mkdirs()
         if (!src.exists()) throw GradleException("cloak source missing: $src")
     }
-    commandLine("cmd", "/c", "where gcc >nul 2>&1 && gcc -O2 -o \"${outFile.absolutePath}\" \"${src.absolutePath}\" -lws2_32 || where clang >nul 2>&1 && clang -O2 -o \"${outFile.absolutePath}\" \"${src.absolutePath}\" -lws2_32 || echo cloak compiler not found, using embedded Kotlin fallback")
+    if (isWinHost) {
+        commandLine("cmd", "/c", "where gcc >nul 2>&1 && gcc -O2 -o \"${outFile.absolutePath}\" \"${src.absolutePath}\" -lws2_32 || where clang >nul 2>&1 && clang -O2 -o \"${outFile.absolutePath}\" \"${src.absolutePath}\" -lws2_32 || echo cloak compiler not found, using embedded Kotlin fallback")
+    } else {
+        commandLine("echo", "Skipping cloak.exe C compilation on non-Windows host")
+    }
     doLast {
         if (outFile.exists() && outFile.length() > 0) {
             outFile.copyTo(File(buildDir, outFile.name), overwrite = true)
@@ -113,7 +118,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
             packageName = "AetherST-Tunnel"
-            packageVersion = "1.1.1"
+            packageVersion = "1.7.1"
             vendor = "ImMaghzBad"
             description = "AetherST High-Performance Proxy Tunnel"
 
@@ -128,10 +133,7 @@ compose.desktop {
             }
 
             buildTypes.release.proguard {
-                isEnabled.set(true)
-                optimize.set(false)
-                obfuscate.set(true)
-                configurationFiles.from(project.file("proguard-rules.pro"))
+                isEnabled.set(false)
             }
         }
     }
