@@ -349,15 +349,13 @@ private fun SettingsSubPage(page: SettingsPage, config: AetherConfig, isBatteryO
             AppDivider()
         }
         IosPickerRow(icon = Icons.AutoMirrored.Filled.AltRoute, iconBg = IosActiveBlue, title = strings.DOMAIN_IP_ROUTING, value = "${config.routingRules.size} ${strings.ROUTING_RULES_TITLE}", options = emptyList(), onOptionSelected = {}, onClickOverride = onOpenRoutingRules)
-        if (isAndroid) {
+        AppDivider()
+        val providerOptions = listOf("Psiphon", "Tor")
+        val providerIdx = if (config.chainProvider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.TOR) 1 else 0
+        IosPickerRow(icon = Icons.Default.Shield, iconBg = AppPalette.accentVariant, title = strings.CHAIN_PROVIDER, value = providerOptions[providerIdx], options = providerOptions, onOptionSelected = { idx -> val provider = if (idx == 1) io.github.immaghzbad.aetherst.shared.model.ChainProvider.TOR else io.github.immaghzbad.aetherst.shared.model.ChainProvider.PSIPHON; onUpdateConfig(config.copy(chainProvider = provider, psiphonEnabled = if (provider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.TOR) false else config.psiphonEnabled, torEnabled = if (provider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.PSIPHON) false else config.torEnabled)) })
+        if (config.chainProvider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.PSIPHON) {
             AppDivider()
-            val providerOptions = listOf("Psiphon", "Tor")
-            val providerIdx = if (config.chainProvider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.TOR) 1 else 0
-            IosPickerRow(icon = Icons.Default.Shield, iconBg = AppPalette.accentVariant, title = strings.CHAIN_PROVIDER, value = providerOptions[providerIdx], options = providerOptions, onOptionSelected = { idx -> val provider = if (idx == 1) io.github.immaghzbad.aetherst.shared.model.ChainProvider.TOR else io.github.immaghzbad.aetherst.shared.model.ChainProvider.PSIPHON; onUpdateConfig(config.copy(chainProvider = provider, psiphonEnabled = if (provider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.TOR) false else config.psiphonEnabled, torEnabled = if (provider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.PSIPHON) false else config.torEnabled)) })
-            if (config.chainProvider == io.github.immaghzbad.aetherst.shared.model.ChainProvider.PSIPHON) {
-                AppDivider()
-                IosSwitchRow(icon = Icons.Default.Shield, iconBg = IosActiveGreen, title = strings.PSIPHON_ONLY, subtitle = strings.PSIPHON_ONLY_SUB, checked = config.psiphonOnly, onCheckedChange = { onUpdateConfig(config.copy(psiphonOnly = it)) }, testTag = "switch_psiphon_only")
-            }
+            IosSwitchRow(icon = Icons.Default.Shield, iconBg = IosActiveGreen, title = strings.PSIPHON_ONLY, subtitle = strings.PSIPHON_ONLY_SUB, checked = config.psiphonOnly, onCheckedChange = { onUpdateConfig(config.copy(psiphonOnly = it)) }, testTag = "switch_psiphon_only")
         }
         if (isAndroid) { AppDivider(); IosSwitchRow(icon = Icons.Default.Share, iconBg = AppPalette.accentVariantAlt, title = strings.SHARE_HOTSPOT, subtitle = strings.SHARE_HOTSPOT_SUB, checked = config.shareHotspot, onCheckedChange = { onUpdateConfig(config.copy(shareHotspot = it)) }, testTag = "switch_share_hotspot"); if (config.shareHotspot) HotspotInfo(config) }
     } }
